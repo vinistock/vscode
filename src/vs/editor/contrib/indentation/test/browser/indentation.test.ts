@@ -386,4 +386,52 @@ suite('Editor Contrib - Auto Dedent On Type', () => {
 			improvedLanguageModel.dispose();
 		});
 	});
+
+	test('end incorrectly matches non keyword for Ruby', () => {
+		const languageId = "ruby";
+		const model = createTextModel("", languageId, {});
+		disposables.add(model);
+
+		withTestCodeEditor(model, { autoIndent: "full" }, (editor, viewModel, instantiationService) => {
+			const languageService = instantiationService.get(ILanguageService);
+			const languageConfigurationService = instantiationService.get(ILanguageConfigurationService);
+			disposables.add(languageService.registerLanguage({ id: languageId }));
+			const languageModel = languageConfigurationService.register(languageId, {
+				brackets: [
+					['{', '}'],
+					['[', ']'],
+					['(', ')']
+				],
+				indentationRules: {
+					decreaseIndentPattern: /\s*([}\]]([,)]?\s*(#|$)|\.[a-zA-Z_]\w*\b)|(end|rescue|ensure|else|elsif|when|in)\b)/,
+					increaseIndentPattern: /^\s*((begin|class|(private|protected)\s+def|def|else|elsif|ensure|for|if|module|rescue|unless|until|when|in|while|case)|([^#]*\sdo\b)|([^#]*=\s*(case|if|unless)))\b([^#\{;]|(\"|'|\/).*\4)*(#.*)?$/,
+				},
+			});
+
+			viewModel.type("def foo\n  en", 'keyboard');
+			viewModel.type("d", 'keyboard');
+			// The 'in' triggers decreaseIndentPattern immediately, which is potentially incorrect
+			assert.strictEqual(model.getValue(), "def foo\nend");
+			languageModel.dispose();
+
+			const improvedLanguageModel = languageConfigurationService.register(languageId, {
+				brackets: [
+					['{', '}'],
+					['[', ']'],
+					['(', ')']
+				],
+				indentationRules: {
+					decreaseIndentPattern: /\s*([}\]]([,)]?\s*(#|$)|\.[a-zA-Z_]\w*\b)|(end|rescue|ensure|else|elsif)\r?\n)|((in|when)\s)/,
+					increaseIndentPattern: /^\s*((begin|class|(private|protected)\s+def|def|else|elsif|ensure|for|if|module|rescue|unless|until|when|in|while|case)|([^#]*\sdo\b)|([^#]*=\s*(case|if|unless)))\b([^#\{;]|(\"|'|\/).*\4)*(#.*)?$/,
+				},
+			});
+			viewModel.model.setValue("");
+			viewModel.type("def foo\n  en");
+			viewModel.type("d", 'keyboard');
+			assert.strictEqual(model.getValue(), "def foo\n  end");
+			viewModel.type("\n", 'keyboard');
+			assert.strictEqual(model.getValue(), "def foo\nend\n");
+			improvedLanguageModel.dispose();
+		});
+	});
 });
